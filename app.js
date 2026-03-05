@@ -526,7 +526,9 @@ function loadOverrides() {
 
 /* ---------- init ---------- */
 async function init() {
-  const res = await fetch("./db.json", { cache: "no-store" })
+  const res = await fetch(new URL("./db.json", window.location.href), {
+    cache: "no-store",
+  })
   state.db = await res.json()
 
   // base do print
