@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Instonity • Resumo da Análise de Lucro</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  </head>
+
+  <body>
+    <main class="wrap">
+      <section class="card">
+        <header class="header">
+          <div class="title">
+            <span class="icon">📈</span>
+            <div>
+              <div class="h1">Resumo da análise de lucro</div>
+              <div class="sub">
+                Baseado no print. Você altera alvos e despesas e tudo recalcula.
+              </div>
+            </div>
+          </div>
+
+          <div class="header-actions">
+            <button id="btnResetBase" class="btn primary" type="button">
+              Resetar para Base
+            </button>
+          </div>
+        </header>
+
+        <div class="grid">
+          <!-- LEFT -->
+          <aside class="box">
+            <h3>Alvos (pretendidos)</h3>
+
+            <div class="row2">
+              <div class="field">
+                <label for="inpMarkupBruto">Markup Bruto</label>
+                <input
+                  id="inpMarkupBruto"
+                  inputmode="decimal"
+                  placeholder="Ex: 2,640"
+                />
+                <div class="hint">
+                  Def: 1 + (Lucro Bruto / Custo). 1,000 → Lucro Bruto = 0
+                </div>
+              </div>
+              <div class="field">
+                <label for="inpMarkupLiquido">Markup Líquido</label>
+                <input
+                  id="inpMarkupLiquido"
+                  inputmode="decimal"
+                  placeholder="Ex: 1,748"
+                />
+                <div class="hint">
+                  Def: 1 + (Lucro Líquido / Custo). 1,000 → Lucro Líquido = 0
+                </div>
+              </div>
+            </div>
+
+            <div class="row2 mt10">
+              <div class="field">
+                <label for="inpMargemBruta">Margem Bruta (%)</label>
+                <input
+                  id="inpMargemBruta"
+                  inputmode="decimal"
+                  placeholder="Ex: 56,65"
+                />
+                <div class="hint">Def: Lucro Bruto / Total NF</div>
+              </div>
+              <div class="field">
+                <label for="inpMargemLiquida">Margem Líquida (%)</label>
+                <input
+                  id="inpMargemLiquida"
+                  inputmode="decimal"
+                  placeholder="Ex: 25,86"
+                />
+                <div class="hint">Def: Lucro Líquido / Total NF</div>
+              </div>
+            </div>
+
+            <div class="divider mt12"></div>
+
+            <h3>Indicadores (calculados)</h3>
+
+            <div class="row2">
+              <div class="field">
+                <label>Markup base (Preço/Custo)</label>
+                <input id="outMarkupPrecoCusto" readonly />
+                <div class="hint">Def: Subtotal / Custo</div>
+              </div>
+              <div class="field">
+                <label>Markup da venda (%)</label>
+                <input id="outMarkupVendaPct" readonly />
+                <div class="hint">Def: (Lucro Bruto / Custo) em %</div>
+              </div>
+            </div>
+
+            <div class="kpis mt12">
+              <div class="kpi">
+                <div class="k">Margem Bruta (%)</div>
+                <div class="v" id="kpiMB">—</div>
+              </div>
+              <div class="kpi">
+                <div class="k">Margem Líquida (%)</div>
+                <div class="v" id="kpiML">—</div>
+              </div>
+              <div class="kpi">
+                <div class="k">Lucro Líquido (R$)</div>
+                <div class="v" id="kpiNet">—</div>
+              </div>
+            </div>
+
+            <div class="divider mt12"></div>
+
+            <h3>Gráficos (tempo real)</h3>
+
+            <div class="chartCard">
+              <div class="chartTitle">Ganho x Gastos (Total NF)</div>
+              <canvas id="chartGanhoGastos" height="170"></canvas>
+            </div>
+
+            <div class="chartCard mt10">
+              <div class="chartTitle">Despesas e Lucro Líquido</div>
+              <canvas id="chartDespesasLucro" height="170"></canvas>
+            </div>
+          </aside>
+
+          <!-- RIGHT -->
+          <section class="panel">
+            <div class="section">
+              <div class="section-title">
+                <h4>Receita</h4>
+                <div class="badge" id="badgeNF">Total NF —</div>
+              </div>
+
+              <div class="rows">
+                <div class="r">
+                  <div class="nameWrap">
+                    <div class="name">Subtotal</div>
+                  </div>
+                  <div class="val neu" id="vSubtotal">—</div>
+                </div>
+
+                <div class="r">
+                  <div class="nameWrap">
+                    <div class="name">Reserva Técnica (RT)</div>
+                  </div>
+                  <div class="val pos" id="vRTplus">—</div>
+                </div>
+
+                <div class="r">
+                  <div class="nameWrap">
+                    <div class="name">IPI</div>
+                  </div>
+                  <div class="val pos" id="vIPI">—</div>
+                </div>
+
+                <div class="r">
+                  <div class="nameWrap">
+                    <div class="name">Outros</div>
+                  </div>
+                  <div class="val neu" id="vOutros">—</div>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="r">
+                  <div class="nameWrap">
+                    <div class="name strong">Total NF</div>
+                  </div>
+                  <div class="val neu" id="vTotalNF">—</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">
+                <h4>Custos e despesas</h4>
+                <div class="desc">editar aqui</div>
+              </div>
+
+              <div class="rows">
+                <div class="r">
+                  <div class="nameWrap">
+                    <div class="name">RT (repasse)</div>
+                  </div>
+                  <div class="val neg" id="vRTminus">—</div>
+                </div>
+
+                <div class="r">
+                  <div class="nameWrap">
+                    <div class="name">Custos de produção</div>
+                  </div>
+                  <div class="val neg" id="vCusto">—</div>
+                </div>
+
+                <div class="divider"></div>
+
+                <button class="expander" id="btnToggleDespesas" type="button">
+                  <span>
+                    <span class="name strong">Despesas de venda</span>
+                    <span class="hint">Clique para editar percentuais</span>
+                  </span>
+                  <span class="chev">▾</span>
+                </button>
+
+                <div class="drop" id="dropDespesas" hidden>
+                  <table class="tbl">
+                    <thead>
+                      <tr>
+                        <th style="width: 50%">Nome</th>
+                        <th style="width: 25%">Base</th>
+                        <th style="width: 15%">%</th>
+                        <th style="width: 10%; text-align: right">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody id="tbDespesas"></tbody>
+                  </table>
+                </div>
+
+                <div class="r">
+                  <div class="nameWrap">
+                    <div class="name">Total despesas de venda</div>
+                  </div>
+                  <div class="val neg" id="vDespesas">—</div>
+                </div>
+
+                <div class="r">
+                  <div class="nameWrap">
+                    <div class="name">Comissão do vendedor</div>
+                  </div>
+                  <div class="val neg" id="vComissao">—</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">
+                <h4>Resultado</h4>
+                <div class="desc">calculado</div>
+              </div>
+
+              <div class="rows">
+                <div class="r">
+                  <div class="nameWrap">
+                    <div class="name strong">Lucro Bruto</div>
+                  </div>
+                  <div class="val neu" id="vLucroBruto">—</div>
+                </div>
+
+                <div class="r">
+                  <div class="nameWrap">
+                    <div class="name strong">Lucro Líquido</div>
+                  </div>
+                  <div class="val neu" id="vLucroLiquido">—</div>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="r">
+                  <div class="nameWrap">
+                    <div class="name">Margem Bruta</div>
+                  </div>
+                  <div class="val neu" id="vMargemBruta">—</div>
+                </div>
+
+                <div class="r">
+                  <div class="nameWrap">
+                    <div class="name">Margem Líquida</div>
+                  </div>
+                  <div class="val neu" id="vMargemLiquida">—</div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
