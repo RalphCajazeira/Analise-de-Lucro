@@ -27,9 +27,9 @@ body {
   font-family: var(--sans);
 }
 .wrap {
-  max-width: 1200px;
-  margin: 22px auto;
-  padding: 0 14px;
+  max-width: 1540px; /* era 1200px */
+  margin: 18px auto; /* um pouco mais compacto */
+  padding: 0 10px; /* menos margem lateral */
 }
 
 .card {
@@ -41,7 +41,7 @@ body {
 }
 
 .header {
-  padding: 16px 18px;
+  padding: 14px 16px; /* era 16px 18px */
   border-bottom: 1px solid var(--line);
   display: flex;
   justify-content: space-between;
@@ -92,8 +92,8 @@ body {
 .grid {
   display: grid;
   grid-template-columns: 1.05fr 1fr;
-  gap: 16px;
-  padding: 16px 18px 18px;
+  gap: 12;
+  padding: 14px 16px 16px;
 }
 @media (max-width: 980px) {
   .grid {
