@@ -581,6 +581,32 @@ async function init() {
   })
 
   // ⚠️ seu reset deve voltar para defaults também (te mando abaixo)
+
+  el.btnResetBase.addEventListener("click", () => {
+    localStorage.removeItem(LS_KEY)
+
+    const b = state.db.base
+    const d = state.db.defaults || {}
+
+    // RT e IPI do orçamento
+    state.rates.rtRate = b.rt / b.subtotal
+    state.rates.ipiRate = b.ipi / b.subtotal
+
+    // valores padrão do db.json
+    state.rates.impostosRate = (d.impostosPct ?? 0) / 100
+    state.rates.embalagemRate = (d.embalagemPct ?? 0) / 100
+    state.rates.freteRate = (d.fretePct ?? 0) / 100
+    state.rates.comissaoRate = (d.comissaoPct ?? 0) / 100
+
+    // subtotal volta ao base
+    state.subtotal = b.subtotal
+
+    // reconstrói tabela de despesas
+    rebuildDespesasTable()
+
+    const o = setTargetsFromSubtotal(state.subtotal)
+    render(o)
+  })
 }
 
 function recalcKeepSubtotal() {
