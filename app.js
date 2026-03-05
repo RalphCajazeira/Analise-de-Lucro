@@ -65,6 +65,7 @@ const el = {
   vTotalNF: document.getElementById("vTotalNF"),
 
   vRTminus: document.getElementById("vRTminus"),
+  vIPIminus: document.getElementById("vIPIminus"),
   vCusto: document.getElementById("vCusto"),
   vDespesas: document.getElementById("vDespesas"),
   vComissao: document.getElementById("vComissao"),
@@ -126,21 +127,34 @@ function computeFromSubtotal(subtotal) {
 
   const custo = base.custoProducao
 
-  const lucroBruto = totalNF - rt - custo // como seu relatório
+  // ✅ LUCRO BRUTO REAL (sem repasses RT/IPI)
+  const lucroBruto = subtotal - custo
 
-  // despesas e comissão como % do Total NF (deduzidos do base)
-  const despesas = state.rates.despesasRate * totalNF
-  const comissao = state.rates.comissaoRate * totalNF
+  // ✅ Despesas com bases diferentes
+  let despesas = 0
+
+  // impostos incidem sobre (Subtotal + RT), sem IPI
+  despesas += (state.rates.impostosRate || 0) * (subtotal + rt)
+
+  // embalagem e frete (e outras “operacionais”) incidem só sobre Subtotal
+  despesas += (state.rates.embalagemRate || 0) * subtotal
+  despesas += (state.rates.freteRate || 0) * subtotal
+
+  // ✅ Comissão sem RT e sem IPI
+  const comissao = (state.rates.comissaoRate || 0) * subtotal
 
   const lucroLiquido = lucroBruto - despesas - comissao
 
-  const margemBruta = totalNF ? (lucroBruto / totalNF) * 100 : 0
-  const margemLiquida = totalNF ? (lucroLiquido / totalNF) * 100 : 0
+  const margemBruta = subtotal ? (lucroBruto / subtotal) * 100 : 0 // base empresa
+  const margemLiquida = subtotal ? (lucroLiquido / subtotal) * 100 : 0 // base empresa
 
   const markupBruto = 1 + lucroBruto / custo
   const markupLiquido = 1 + lucroLiquido / custo
 
+  // “markup base preço/custo” continua sendo o que você quer mostrar como referência comercial:
   const markupPrecoCusto = custo ? subtotal / custo : 0
+
+  // markup da venda (%) = lucro bruto / custo
   const markupVendaPct = custo ? (lucroBruto / custo) * 100 : 0
 
   return {
@@ -216,7 +230,11 @@ function solveSubtotalForMarkupLiquido(target) {
   const targetLucro = custo * (target - 1)
 
   // lucroLiquido = lucroBruto - k*totalNF, onde k = despesasRate+comissaoRate
-  const k = state.rates.despesasRate + state.rates.comissaoRate
+  const k =
+    (state.rates.impostosRate || 0) +
+    (state.rates.embalagemRate || 0) +
+    (state.rates.freteRate || 0) +
+    (state.rates.comissaoRate || 0)
 
   // lucroBruto = a*s + b
   const a = 1 + state.rates.ipiRate
@@ -242,7 +260,11 @@ function solveSubtotalForMargemLiquida(targetPct) {
   const custo = base.custoProducao
   const outros = base.outros || 0
 
-  const k = state.rates.despesasRate + state.rates.comissaoRate
+  const k =
+    (state.rates.impostosRate || 0) +
+    (state.rates.embalagemRate || 0) +
+    (state.rates.freteRate || 0) +
+    (state.rates.comissaoRate || 0)
 
   // lucroLiquido = p*s + q
   const a = 1 + state.rates.ipiRate
@@ -272,7 +294,6 @@ function render(o) {
   el.vOutros.textContent = brl(o.outros)
   el.vTotalNF.textContent = brl(o.totalNF)
 
-  el.vRTminus.textContent = "- " + brl(o.rt)
   el.vCusto.textContent = "- " + brl(o.custo)
   el.vDespesas.textContent = "- " + brl(o.despesas)
   el.vComissao.textContent = "- " + brl(o.comissao)
@@ -289,6 +310,8 @@ function render(o) {
 
   el.outMarkupPrecoCusto.value = dec(o.markupPrecoCusto, 3) // deve dar 2,549 no base
   el.outMarkupVendaPct.value = pct(o.markupVendaPct, 2) // ex: 163,98%
+
+  el.vIPIminus.textContent = "- " + brl(o.ipi)
 
   // targets: não sobrescreve enquanto digita
   setIfNotActive(el.inpMarkupBruto, dec(state.target.markupBruto, 3))
@@ -307,11 +330,21 @@ function rebuildDespesasTable() {
   // Como você disse que “agora o importante é bater com o print”, a lista é simples.
   const rows = [
     {
-      key: "despesasRate",
-      nome: "Despesas de venda (total)",
-      base: "TOTAL_NF",
+      key: "impostosRate",
+      nome: "Impostos (sobre Subtotal + RT)",
+      base: "Subtotal + RT",
     },
-    { key: "comissaoRate", nome: "Comissão do vendedor", base: "TOTAL_NF" },
+    {
+      key: "embalagemRate",
+      nome: "Embalagem (sobre Subtotal)",
+      base: "Subtotal",
+    },
+    { key: "freteRate", nome: "Frete (sobre Subtotal)", base: "Subtotal" },
+    {
+      key: "comissaoRate",
+      nome: "Comissão vendedor (sobre Subtotal)",
+      base: "Subtotal",
+    },
   ]
 
   for (const r of rows) {
@@ -538,9 +571,15 @@ async function init() {
   state.rates.rtRate = b.rt / b.subtotal
   state.rates.ipiRate = b.ipi / b.subtotal
 
-  // despesas e comissão como % do TOTAL NF (do print)
-  state.rates.despesasRate = b.despesasVendaTotal / b.totalNF
-  state.rates.comissaoRate = b.comissaoVendedor / b.totalNF
+  // assume “despesas” como impostos por enquanto (base: subtotal+rt)
+  state.rates.impostosRate = b.despesasVendaTotal / (b.subtotal + b.rt)
+
+  // comissão é sobre subtotal
+  state.rates.comissaoRate = b.comissaoVendedor / b.subtotal
+
+  // inicia outros em 0
+  state.rates.embalagemRate = 0
+  state.rates.freteRate = 0
 
   // aplica overrides locais (se existirem)
   loadOverrides()
@@ -580,7 +619,7 @@ async function init() {
     // recarrega rates base do print
     state.rates.rtRate = b.rt / b.subtotal
     state.rates.ipiRate = b.ipi / b.subtotal
-    state.rates.despesasRate = b.despesasVendaTotal / b.totalNF
+    state.rates.impostosRate = b.despesasVendaTotal / (b.subtotal + b.rt)
     state.rates.comissaoRate = b.comissaoVendedor / b.totalNF
 
     rebuildDespesasTable()
