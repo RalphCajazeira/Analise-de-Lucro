@@ -5,26 +5,17 @@
     "rt": 132.81,
     "ipi": 47.48,
     "outros": 0.0,
-
     "totalNF": 1508.44,
 
     "custoProducao": 521.1,
     "despesasVendaTotal": 377.11,
-    "comissaoVendedor": 39.84,
-
-    "meta": {
-      "rtPct": 10.0,
-      "ipiPct": 3.25,
-      "comissaoPct": 3.0
-    }
+    "comissaoVendedor": 39.84
   },
 
-  "despesas": [
-    {
-      "id": "imp",
-      "nome": "Despesas de venda (total)",
-      "base": "TOTAL_NF",
-      "pct": 25.0
-    }
-  ]
+  "defaults": {
+    "impostosPct": 20,
+    "embalagemPct": 2.5,
+    "fretePct": 2.5,
+    "comissaoPct": 3
+  }
 }

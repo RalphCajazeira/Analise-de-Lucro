@@ -93,8 +93,11 @@ const state = {
   rates: {
     rtRate: 0,
     ipiRate: 0,
-    despesasRate: 0,
-    comissaoRate: 0,
+    // despesas (cada uma com sua base)
+    impostosRate: 0, // base: Subtotal + RT
+    embalagemRate: 0, // base: Subtotal
+    freteRate: 0, // base: Subtotal
+    comissaoRate: 0, // base: Subtotal
   },
 
   // targets atuais (começam iguais ao base calculado)
@@ -178,110 +181,77 @@ function computeFromSubtotal(subtotal) {
 }
 
 /**
- * Solvers (mantendo o modelo simples e coerente com o print):
- * - totalNF = (1+rt+ipi)*s + outros
- * - lucroBruto = (1+ipi)*s + outros - custo
- * - despesas = dRate * totalNF
- * - comissão = cRate * totalNF
- * - lucroLiquido = lucroBruto - (dRate+cRate)*totalNF
+ * Solvers (modelo NOVO - regras da marmoraria):
+ * - RT e IPI são repasses (não entram no lucro)
+ * - Comissão incide sobre Subtotal (sem RT e sem IPI)
+ * - Impostos incidem sobre (Subtotal + RT), sem IPI
+ * - Embalagem/Frete incidem sobre Subtotal
+ * - Margens (%) são calculadas sobre Subtotal (base empresa)
  */
 function solveSubtotalForMarkupBruto(target) {
-  const base = state.db.base
-  const custo = base.custoProducao
-  const outros = base.outros || 0
-
-  // lucroBruto = custo*(target-1)
-  const targetLucro = custo * (target - 1)
-
-  // lucroBruto = (1+ipi)*s + outros - custo
-  const a = 1 + state.rates.ipiRate
-  const b = outros - custo
-
-  // a*s + b = targetLucro => s = (targetLucro - b)/a
-  return (targetLucro - b) / a
+  const custo = state.db.base.custoProducao
+  // markupBruto = 1 + (lucroBruto/custo)
+  // lucroBruto = subtotal - custo
+  // => markupBruto = subtotal/custo
+  return target * custo
 }
 
 function solveSubtotalForMargemBruta(targetPct) {
   const m = targetPct / 100
-  const base = state.db.base
-  const custo = base.custoProducao
-  const outros = base.outros || 0
+  const custo = state.db.base.custoProducao
 
-  // lucroBruto = a*s + b
-  const a = 1 + state.rates.ipiRate
-  const b = outros - custo
-
-  // totalNF = c*s + d
-  const c = 1 + state.rates.rtRate + state.rates.ipiRate
-  const d = outros
-
-  // m = (a*s+b)/(c*s+d) => (m*c - a)s = b - m*d
-  const denom = m * c - a
+  // margemBruta = (subtotal - custo) / subtotal
+  // => subtotal = custo / (1 - m)
+  const denom = 1 - m
   if (Math.abs(denom) < 1e-12) return state.subtotal
-
-  return (b - m * d) / denom
+  return custo / denom
 }
 
 function solveSubtotalForMarkupLiquido(target) {
-  const base = state.db.base
-  const custo = base.custoProducao
-  const outros = base.outros || 0
+  const custo = state.db.base.custoProducao
+  const rtRate = state.rates.rtRate || 0
 
+  const impostosRate = state.rates.impostosRate || 0 // base (subtotal + rt)
+  const embRate = state.rates.embalagemRate || 0 // base subtotal
+  const freteRate = state.rates.freteRate || 0 // base subtotal
+  const comRate = state.rates.comissaoRate || 0 // base subtotal
+
+  // lucroLiquido = (subtotal - custo)
+  //            - impostosRate*(subtotal + rtRate*subtotal)
+  //            - (embRate + freteRate)*subtotal
+  //            - comRate*subtotal
+  // => lucroLiquido = coef*subtotal - custo
+  const coef = 1 - impostosRate * (1 + rtRate) - embRate - freteRate - comRate
+
+  // markupLiquido = 1 + (lucroLiquido/custo)
+  // => lucroLiquido = custo*(target - 1)
   const targetLucro = custo * (target - 1)
 
-  // lucroLiquido = lucroBruto - k*totalNF, onde k = despesasRate+comissaoRate
-  const k =
-    (state.rates.impostosRate || 0) +
-    (state.rates.embalagemRate || 0) +
-    (state.rates.freteRate || 0) +
-    (state.rates.comissaoRate || 0)
-
-  // lucroBruto = a*s + b
-  const a = 1 + state.rates.ipiRate
-  const b = outros - custo
-
-  // totalNF = c*s + d
-  const c = 1 + state.rates.rtRate + state.rates.ipiRate
-  const d = outros
-
-  // lucroLiquido = (a*s + b) - k*(c*s + d) = (a - k*c)s + (b - k*d)
-  const p = a - k * c
-  const q = b - k * d
-
-  if (Math.abs(p) < 1e-12) return state.subtotal
-
-  // p*s + q = targetLucro
-  return (targetLucro - q) / p
+  // coef*subtotal - custo = targetLucro
+  // => subtotal = (targetLucro + custo) / coef
+  if (Math.abs(coef) < 1e-12) return state.subtotal
+  return (targetLucro + custo) / coef
 }
 
 function solveSubtotalForMargemLiquida(targetPct) {
   const m = targetPct / 100
-  const base = state.db.base
-  const custo = base.custoProducao
-  const outros = base.outros || 0
+  const custo = state.db.base.custoProducao
+  const rtRate = state.rates.rtRate || 0
 
-  const k =
-    (state.rates.impostosRate || 0) +
-    (state.rates.embalagemRate || 0) +
-    (state.rates.freteRate || 0) +
-    (state.rates.comissaoRate || 0)
+  const impostosRate = state.rates.impostosRate || 0
+  const embRate = state.rates.embalagemRate || 0
+  const freteRate = state.rates.freteRate || 0
+  const comRate = state.rates.comissaoRate || 0
 
-  // lucroLiquido = p*s + q
-  const a = 1 + state.rates.ipiRate
-  const b = outros - custo
+  const coef = 1 - impostosRate * (1 + rtRate) - embRate - freteRate - comRate
 
-  const c = 1 + state.rates.rtRate + state.rates.ipiRate
-  const d = outros
-
-  const p = a - k * c
-  const q = b - k * d
-
-  // totalNF = c*s + d
-  // m = (p*s+q)/(c*s+d) => (m*c - p)s = q - m*d
-  const denom = m * c - p
+  // margemLiquida = lucroLiquido / subtotal
+  // lucroLiquido = coef*subtotal - custo
+  // => m = coef - custo/subtotal
+  // => subtotal = custo / (coef - m)
+  const denom = coef - m
   if (Math.abs(denom) < 1e-12) return state.subtotal
-
-  return (q - m * d) / denom
+  return custo / denom
 }
 
 /* ---------- UI render ---------- */
@@ -294,6 +264,7 @@ function render(o) {
   el.vOutros.textContent = brl(o.outros)
   el.vTotalNF.textContent = brl(o.totalNF)
 
+  if (el.vRTminus) el.vRTminus.textContent = "- " + brl(o.rt)
   el.vCusto.textContent = "- " + brl(o.custo)
   el.vDespesas.textContent = "- " + brl(o.despesas)
   el.vComissao.textContent = "- " + brl(o.comissao)
@@ -311,7 +282,7 @@ function render(o) {
   el.outMarkupPrecoCusto.value = dec(o.markupPrecoCusto, 3) // deve dar 2,549 no base
   el.outMarkupVendaPct.value = pct(o.markupVendaPct, 2) // ex: 163,98%
 
-  el.vIPIminus.textContent = "- " + brl(o.ipi)
+  if (el.vIPIminus) el.vIPIminus.textContent = "- " + brl(o.ipi)
 
   // targets: não sobrescreve enquanto digita
   setIfNotActive(el.inpMarkupBruto, dec(state.target.markupBruto, 3))
@@ -365,7 +336,7 @@ function rebuildDespesasTable() {
     const inp = document.createElement("input")
     inp.className = "miniInput"
     inp.inputMode = "decimal"
-    const currentPct = state.rates[r.key] * 100
+    const currentPct = (state.rates[r.key] || 0) * 100
     inp.value = String(currentPct.toFixed(3)).replace(".", ",")
 
     // não perde foco porque a gente NÃO recria a tabela a cada tecla
@@ -559,77 +530,36 @@ function loadOverrides() {
 
 /* ---------- init ---------- */
 async function init() {
-  const res = await fetch(new URL("./db.json", window.location.href), {
-    cache: "no-store",
-  })
+  const res = await fetch("./db.json", { cache: "no-store" })
   state.db = await res.json()
 
-  // base do print
   const b = state.db.base
+  const d = state.db.defaults || {}
 
-  // rates deduzidas do base (pra recalcular cenário sem “chutar”)
+  // ✅ RT e IPI são do orçamento (print): deduzidos do base
   state.rates.rtRate = b.rt / b.subtotal
   state.rates.ipiRate = b.ipi / b.subtotal
 
-  // assume “despesas” como impostos por enquanto (base: subtotal+rt)
-  state.rates.impostosRate = b.despesasVendaTotal / (b.subtotal + b.rt)
+  // ✅ Página inicial deve abrir com o preset (2ª imagem)
+  state.rates.impostosRate = (d.impostosPct ?? 0) / 100
+  state.rates.embalagemRate = (d.embalagemPct ?? 0) / 100
+  state.rates.freteRate = (d.fretePct ?? 0) / 100
+  state.rates.comissaoRate = (d.comissaoPct ?? 0) / 100
 
-  // comissão é sobre subtotal
-  state.rates.comissaoRate = b.comissaoVendedor / b.subtotal
-
-  // inicia outros em 0
-  state.rates.embalagemRate = 0
-  state.rates.freteRate = 0
-
-  // aplica overrides locais (se existirem)
+  // ✅ aplica overrides locais por cima (se existirem)
   loadOverrides()
 
-  // subtotal inicial (base)
+  // subtotal inicial (base do print)
   state.subtotal = b.subtotal
 
-  // charts
   initCharts()
-
-  // despesas table
   rebuildDespesasTable()
 
-  // targets iniciais = base calculado
+  // targets iniciais calculados em cima do subtotal base
   const o0 = setTargetsFromSubtotal(state.subtotal)
-
-  // render base (deve bater com o print)
   render(o0)
 
-  // binds (digitável sem travar)
-  bindTargetInput(el.inpMarkupBruto, "markupBruto")
-  bindTargetInput(el.inpMarkupLiquido, "markupLiquido")
-  bindTargetInput(el.inpMargemBruta, "margemBruta")
-  bindTargetInput(el.inpMargemLiquida, "margemLiquida")
-
-  // dropdown
-  el.btnToggleDespesas.addEventListener("click", () => {
-    const open = el.btnToggleDespesas.getAttribute("data-open") === "true"
-    el.btnToggleDespesas.setAttribute("data-open", String(!open))
-    el.dropDespesas.hidden = open
-  })
-
-  // reset base (volta ao print)
-  el.btnResetBase.addEventListener("click", () => {
-    localStorage.removeItem(LS_KEY)
-
-    // recarrega rates base do print
-    state.rates.rtRate = b.rt / b.subtotal
-    state.rates.ipiRate = b.ipi / b.subtotal
-    state.rates.impostosRate = b.despesasVendaTotal / (b.subtotal + b.rt)
-    state.rates.comissaoRate = b.comissaoVendedor / b.totalNF
-
-    rebuildDespesasTable()
-
-    state.subtotal = b.subtotal
-    const o = setTargetsFromSubtotal(state.subtotal)
-    render(o)
-  })
-
-  // força o Chart.js a desenhar na primeira carga
+  // (opcional) força charts desenhar de primeira
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       state.charts?.a?.resize()
@@ -638,6 +568,19 @@ async function init() {
       state.charts?.b?.update()
     })
   })
+
+  bindTargetInput(el.inpMarkupBruto, "markupBruto")
+  bindTargetInput(el.inpMarkupLiquido, "markupLiquido")
+  bindTargetInput(el.inpMargemBruta, "margemBruta")
+  bindTargetInput(el.inpMargemLiquida, "margemLiquida")
+
+  el.btnToggleDespesas.addEventListener("click", () => {
+    const open = el.btnToggleDespesas.getAttribute("data-open") === "true"
+    el.btnToggleDespesas.setAttribute("data-open", String(!open))
+    el.dropDespesas.hidden = open
+  })
+
+  // ⚠️ seu reset deve voltar para defaults também (te mando abaixo)
 }
 
 function recalcKeepSubtotal() {
